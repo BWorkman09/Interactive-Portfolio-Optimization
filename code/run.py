@@ -1,5 +1,6 @@
 import streamlit as st
-from code.services import optimize_portfolio  # placeholder for future RL logic
+from services import optimize_portfolio
+
 
 # --- Page Config ---
 st.set_page_config(page_title="Interactive Portfolio Optimizer", layout="wide")
@@ -47,3 +48,6 @@ else:
     st.info("Adjust your preferences in the sidebar and click 'Optimize Portfolio'.")
 
 
+
+
+#streamlit run code/run.py
