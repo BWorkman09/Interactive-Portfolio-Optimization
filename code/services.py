@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 from stable_baselines3 import PPO
 from .data import fetch_market_data
+from code.env.portfolio_env import CustomPortfolioEnv
 
 
 def fetch_market_data(assets, start="2019-01-01", end="2024-01-01"):
