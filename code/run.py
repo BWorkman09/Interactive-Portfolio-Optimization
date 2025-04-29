@@ -12,6 +12,12 @@ st.markdown("Use reinforcement learning to optimize your asset allocation based 
 # --- Sidebar Inputs ---
 st.sidebar.title("Portfolio Optimization Settings")
 
+time_range = st.sidebar.selectbox(
+    "Performance Timeframe",
+    ["Days", "Weeks", "Months", "1 Year"]
+)
+
+
 # Risk Tolerance
 risk_tolerance = st.sidebar.selectbox(
     "Select your risk tolerance:",
