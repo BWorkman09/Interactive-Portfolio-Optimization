@@ -29,36 +29,34 @@ class CustomPortfolioEnv(gym.Env):
         self.current_step = 0
         self.portfolio_value = 1_000.0
         return self.returns[self.current_step]
-
+    
     def step(self, action):
-        # Normalize action to sum to 1 (valid portfolio weights)
         weights = np.clip(action, 0, 1)
-        weights /= np.sum(weights)
 
-        # Get returns for this step
+        if np.sum(weights) == 0:
+            weights = np.ones_like(weights) / len(weights)
+        else:
+            weights /= np.sum(weights)
+
         asset_returns = self.returns[self.current_step]
-
-        # Calculate portfolio return
         portfolio_return = np.dot(weights, asset_returns)
-
-        # Adjust for risk profile
         adjusted_return = portfolio_return * self.risk_multiplier
-
-        # Update portfolio value
         self.portfolio_value *= (1 + adjusted_return)
 
-        # Move to next step
         self.current_step += 1
-
         done = self.current_step >= len(self.returns) - 1
 
-        reward = adjusted_return  # Reward is just adjusted return
+        if not done:
+            obs = self.returns[self.current_step]
+        else:
+            obs = np.zeros(self.num_assets)
 
-        obs = self.returns[self.current_step] if not done else np.zeros(self.num_assets)
-
+        reward = adjusted_return
         info = {"portfolio_value": self.portfolio_value}
 
         return obs, reward, done, info
+
+
 
     def render(self, mode="human"):
         print(f"Step {self.current_step}: Portfolio Value ${self.portfolio_value:.2f}")
