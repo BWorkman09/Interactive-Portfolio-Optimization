@@ -5,6 +5,7 @@ from stable_baselines3 import PPO
 from portfolio_env import CustomPortfolioEnv
 import yfinance as yf
 import pandas as pd
+import numpy as np
 
 def fetch_market_data(assets, start="2019-01-01", end="2024-01-01"):
     data = yf.download(assets, start=start, end=end)["Close"]

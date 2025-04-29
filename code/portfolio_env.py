@@ -4,59 +4,50 @@ import numpy as np
 class CustomPortfolioEnv(gym.Env):
     def __init__(self, data, risk_profile="Moderate"):
         super(CustomPortfolioEnv, self).__init__()
-
-        self.data = data
+        
+        self.data = data  # historical price data (DataFrame)
         self.assets = data.columns.tolist()
         self.num_assets = len(self.assets)
+        self.current_step = 0
 
-        # Normalize to returns
+        # Normalize price changes into returns
         self.returns = self.data.pct_change().dropna().values
+        self.returns = np.nan_to_num(self.returns, nan=0.0, posinf=0.0, neginf=0.0)  # prevent instability
 
+        # Action: portfolio weights [0,1] per asset
         self.action_space = gym.spaces.Box(low=0, high=1, shape=(self.num_assets,), dtype=np.float32)
+        
+        # Observation: recent returns
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.num_assets,), dtype=np.float32)
 
-        self.risk_multiplier = {
-            "Conservative": 0.5,
-            "Moderate": 1.0,
-            "Aggressive": 1.5
-        }.get(risk_profile, 1.0)
+        # Risk adjustment
+        self.risk_multiplier = {"Conservative": 0.5, "Moderate": 1.0, "Aggressive": 1.5}.get(risk_profile, 1.0)
 
-        self.portfolio_value = 1000.0
-        self.current_step = 0
+        # Track portfolio
+        self.portfolio_value = 1_000.0  # starting $1000
 
     def reset(self):
         self.current_step = 0
-        self.portfolio_value = 1000.0
-
-        obs = self.returns[self.current_step]
-        obs = np.nan_to_num(obs, nan=0.0)  # 👈 ensure no NaNs
-        return obs
-
+        self.portfolio_value = 1_000.0
+        return self.returns[self.current_step]
+    
     def step(self, action):
         weights = np.clip(action, 0, 1)
+
         if np.sum(weights) == 0:
-            weights = np.ones_like(weights) / self.num_assets
+            weights = np.ones_like(weights) / len(weights)
         else:
             weights /= np.sum(weights)
 
         asset_returns = self.returns[self.current_step]
-        asset_returns = np.nan_to_num(asset_returns, nan=0.0)  # 👈 ensure no NaNs
-
         portfolio_return = np.dot(weights, asset_returns)
-        portfolio_return = np.clip(portfolio_return, -1.0, 1.0)
-
         adjusted_return = portfolio_return * self.risk_multiplier
         self.portfolio_value *= (1 + adjusted_return)
 
         self.current_step += 1
         done = self.current_step >= len(self.returns) - 1
 
-        if not done:
-            obs = self.returns[self.current_step]
-            obs = np.nan_to_num(obs, nan=0.0)  # 👈 again sanitize NaNs
-        else:
-            obs = np.zeros(self.num_assets)
-
+        obs = self.returns[self.current_step] if not done else np.zeros(self.num_assets)
         reward = adjusted_return
         info = {"portfolio_value": self.portfolio_value}
 
