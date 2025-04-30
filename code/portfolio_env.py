@@ -30,7 +30,6 @@ class CustomPortfolioEnv(gym.Env):
         return self.returns[self.current_step], {}  # if using gymnasium or SB3 compatibility
 
 
-
     def step(self, action):
         weights = np.clip(action, 0, 1)
         weights = weights / np.sum(weights) if np.sum(weights) > 0 else np.ones_like(weights) / len(weights)
