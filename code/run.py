@@ -1,7 +1,6 @@
 import streamlit as st
 from services import optimize_portfolio
 
-
 # --- Page Config ---
 st.set_page_config(page_title="Interactive Portfolio Optimizer", layout="wide")
 
@@ -10,13 +9,14 @@ st.title("📈 Interactive Portfolio Optimization")
 st.markdown("Use reinforcement learning to optimize your asset allocation based on your risk preferences and goals.")
 
 # --- Sidebar Inputs ---
-st.sidebar.title("Portfolio Optimization Settings")
+st.sidebar.header("Portfolio Settings")
 
-time_range = st.sidebar.selectbox(
-    "Performance Timeframe",
-    ["Days", "Weeks", "Months", "1 Year"]
+# Ticker Input
+ticker_input = st.sidebar.text_input(
+    "Enter stock tickers (comma-separated):",
+    value="AAPL,MSFT,GOOGL"
 )
-
+selected_assets = [ticker.strip().upper() for ticker in ticker_input.split(",") if ticker.strip()]
 
 # Risk Tolerance
 risk_tolerance = st.sidebar.selectbox(
@@ -25,30 +25,24 @@ risk_tolerance = st.sidebar.selectbox(
 )
 
 # Investment Amount
-investment_amount = st.sidebar.number_input(
-    "Enter maximum investment amount ($):",
+investment_amount = st.sidebar.slider(
+    "Investment Amount ($)",
     min_value=1000,
-    step=1000,
-    value=10000
+    max_value=100000,
+    value=10000,
+    step=1000
 )
 
-# Ticker Input
-st.sidebar.subheader("Select Assets")
-
-ticker_input = st.sidebar.text_input(
-    "Enter stock tickers (comma-separated):",
-    value="AAPL,MSFT,GOOGL"  # default starting example
+# Performance Timeframe
+time_range = st.sidebar.selectbox(
+    "Performance Timeframe",
+    ["7 Days", "1 Month", "6 Months", "1 Year"]
 )
-
-
-# Process user input into a list of tickers
-selected_assets = [ticker.strip().upper() for ticker in ticker_input.split(",") if ticker.strip()]
-
 
 # --- Submit Button ---
 if st.sidebar.button("Optimize Portfolio"):
     with st.spinner("Running optimization..."):
-        portfolio = optimize_portfolio(risk_tolerance, investment_amount, selected_assets)
+        portfolio = optimize_portfolio(risk_tolerance, investment_amount, selected_assets, time_range)
 
     st.success("Optimization complete!")
 

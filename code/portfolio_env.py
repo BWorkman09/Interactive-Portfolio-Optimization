@@ -2,18 +2,19 @@ import gymnasium as gym
 import numpy as np
 
 class CustomPortfolioEnv(gym.Env):
-    def __init__(self, data, risk_profile="Moderate"):
+    def __init__(self, data, risk_profile="Moderate", initial_investment=1000):
         super(CustomPortfolioEnv, self).__init__()
 
         self.assets = data.columns.tolist()
         self.num_assets = len(self.assets)
         self.data = data
 
-        self.dates = data.index  # <-- store dates from DataFrame BEFORE converting to values
+        self.dates = data.index
         self.returns = data.pct_change().dropna().replace([np.inf, -np.inf], np.nan).dropna().values
 
         self.current_step = 0
-        self.portfolio_value = 1_000.0
+        self.initial_investment = initial_investment
+        self.portfolio_value = self.initial_investment
         self.history = [self.portfolio_value]
 
         self.action_space = gym.spaces.Box(low=0, high=1, shape=(self.num_assets,), dtype=np.float32)
@@ -21,14 +22,14 @@ class CustomPortfolioEnv(gym.Env):
 
         self.risk_multiplier = {"Conservative": 0.5, "Moderate": 1.0, "Aggressive": 1.5}.get(risk_profile, 1.0)
 
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
 
+    def reset(self, seed=None, options=None):
         self.current_step = 0
-        self.portfolio_value = 1_000.0
+        self.portfolio_value = self.initial_investment  # ✅ dynamic
         self.history = [self.portfolio_value]
-        
-        return self.returns[self.current_step], {}  # Notice: must return (obs, info) now!
+        return self.returns[self.current_step], {}  # if using gymnasium or SB3 compatibility
+
+
 
     def step(self, action):
         weights = np.clip(action, 0, 1)
