@@ -1,40 +1,35 @@
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+from stable_baselines3 import PPO
+from portfolio_env import CustomPortfolioEnv
+
 import yfinance as yf
 import datetime
-from portfolio_env import CustomPortfolioEnv
-from stable_baselines3 import PPO
-import plotly.graph_objects as go
-
 
 def fetch_market_data(assets, time_range):
-    import yfinance as yf
-    import pandas as pd
-    import datetime
-
     end = datetime.datetime.today()
+    days_lookup = {
+        "7 Days": 7,
+        "1 Month": 30,
+        "6 Months": 180,
+        "1 Year": 365
+    }
+    days = days_lookup.get(time_range, 365)
+    start = end - datetime.timedelta(days=days)
 
-    # Map time_range to start date
-    if time_range == "7 Days":
-        start = end - datetime.timedelta(days=7)
-    elif time_range == "1 Month":
-        start = end - datetime.timedelta(days=30)
-    elif time_range == "6 Months":
-        start = end - datetime.timedelta(days=182)
-    else:  # "1 Year"
-        start = end - datetime.timedelta(days=365)
+    data = yf.download(assets, start=start, end=end, auto_adjust=True, group_by='ticker')
 
-    data = yf.download(assets, start=start, end=end, group_by='ticker', auto_adjust=True)
-
-    # Handle single vs multi-asset format
     if isinstance(data.columns, pd.MultiIndex):
-        close_data = pd.DataFrame({ticker: data[ticker]["Close"] for ticker in assets})
+        # Multiple tickers: extract "Close" from each
+        close_prices = pd.concat([data[ticker]["Close"] for ticker in assets], axis=1)
+        close_prices.columns = assets
     else:
-        close_data = pd.DataFrame(data["Close"])
-        close_data.columns = assets
+        # Single ticker: flat DataFrame
+        close_prices = pd.DataFrame(data["Close"])
+        close_prices.columns = assets
 
-    return close_data.dropna()
-
+    return close_prices.dropna()
 
 def optimize_portfolio(risk_tolerance, investment_amount, assets, time_range):
     import numpy as np
@@ -42,18 +37,17 @@ def optimize_portfolio(risk_tolerance, investment_amount, assets, time_range):
     import plotly.graph_objects as go
     from stable_baselines3 import PPO
     from portfolio_env import CustomPortfolioEnv
-    from services import fetch_market_data
-
-    # Step 1: Fetch historical data based on time_range
+    
+    # Step 1: Fetch historical data
     data = fetch_market_data(assets, time_range)
     returns = data.pct_change().dropna()
 
-    # Step 2: Initialize environment with investment amount
+    # Step 2: Set up RL environment
     env = CustomPortfolioEnv(data, risk_profile=risk_tolerance, initial_investment=investment_amount)
     model = PPO("MlpPolicy", env, verbose=0)
     model.learn(total_timesteps=20000)
 
-    # Step 3: Run RL agent
+    # Step 3: Simulate RL agent performance
     obs, info = env.reset()
     rl_values = [env.portfolio_value]
     done = False
@@ -62,19 +56,20 @@ def optimize_portfolio(risk_tolerance, investment_amount, assets, time_range):
         obs, reward, done, _, info = env.step(action)
         rl_values.append(env.portfolio_value)
 
-    # Step 4: Generate allocation pie chart
+    # Step 4: Final portfolio weights (for pie chart)
     weights = np.clip(action, 0, 1)
     weights = weights / np.sum(weights) if np.sum(weights) > 0 else np.ones_like(weights) / len(weights)
     allocation_chart = go.Figure(data=[go.Pie(labels=assets, values=weights, hole=0.4)])
     allocation_chart.update_layout(title="Optimized Portfolio Allocation")
 
-    # Step 5: Passive equal-weight benchmark (same initial investment)
+    # Step 5: Passive equal-weight benchmark (start from same $)
     equal_weights = np.ones(len(assets)) / len(assets)
     passive_returns = returns.dot(equal_weights)
-    passive_growth = (1 + passive_returns).cumprod() * investment_amount
-    passive_dates = returns.index
+    passive_growth = (1 + passive_returns).cumprod()
+    passive_growth = (passive_growth / passive_growth.iloc[0]) * investment_amount  # Force same start
+    passive_dates = passive_growth.index
 
-    # Step 6: Build performance comparison chart
+    # Step 6: Performance comparison plot
     performance_chart = go.Figure()
     performance_chart.add_trace(go.Scatter(
         x=info["dates"],
@@ -95,7 +90,7 @@ def optimize_portfolio(risk_tolerance, investment_amount, assets, time_range):
         yaxis_title="Portfolio Value ($)"
     )
 
-    # Step 7: Allocation CSV export
+    # Step 7: CSV Export
     allocations_df = pd.DataFrame({
         "Asset": assets,
         "Allocation (%)": np.round(weights * 100, 2)
