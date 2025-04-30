@@ -37,73 +37,54 @@ def fetch_market_data(assets, time_range):
 
 
 def optimize_portfolio(risk_tolerance, investment_amount, assets, time_range):
-    # Step 1: Fetch full data
-    full_data = fetch_market_data(assets, time_range)
+    import numpy as np
+    import pandas as pd
+    import plotly.graph_objects as go
+    from stable_baselines3 import PPO
+    from portfolio_env import CustomPortfolioEnv
+    from services import fetch_market_data
 
-    # Step 2: Filter data based on selected timeframe
-    end_date = full_data.index[-1]
-    if time_range == "7 Days":
-        start_date = end_date - pd.Timedelta(days=7)
-    elif time_range == "1 Month":
-        start_date = end_date - pd.DateOffset(months=1)
-    elif time_range == "6 Months":
-        start_date = end_date - pd.DateOffset(months=6)
-    else:  # "1 Year"
-        start_date = end_date - pd.DateOffset(years=1)
-
-    data = full_data[full_data.index >= start_date]
-
-    # Step 3: Calculate returns
+    # Step 1: Fetch historical data based on time_range
+    data = fetch_market_data(assets, time_range)
     returns = data.pct_change().dropna()
 
-    # Step 4: Create environment and model
+    # Step 2: Initialize environment with investment amount
     env = CustomPortfolioEnv(data, risk_profile=risk_tolerance, initial_investment=investment_amount)
     model = PPO("MlpPolicy", env, verbose=0)
     model.learn(total_timesteps=20000)
 
-    # Step 5: Run the trained model
+    # Step 3: Run RL agent
     obs, info = env.reset()
-    portfolio_values = [env.portfolio_value]
+    rl_values = [env.portfolio_value]
     done = False
-
     while not done:
         action, _ = model.predict(obs)
-        obs, reward, done, truncated, info = env.step(action)
-        portfolio_values.append(env.portfolio_value)
+        obs, reward, done, _, info = env.step(action)
+        rl_values.append(env.portfolio_value)
 
-    # Step 6: RL Allocation chart
+    # Step 4: Generate allocation pie chart
     weights = np.clip(action, 0, 1)
-    weights /= np.sum(weights) if np.sum(weights) > 0 else len(weights)
-
-    allocation_chart = go.Figure(data=[go.Pie(
-        labels=assets,
-        values=weights,
-        hole=0.4
-    )])
+    weights = weights / np.sum(weights) if np.sum(weights) > 0 else np.ones_like(weights) / len(weights)
+    allocation_chart = go.Figure(data=[go.Pie(labels=assets, values=weights, hole=0.4)])
     allocation_chart.update_layout(title="Optimized Portfolio Allocation")
 
-    # Step 7: Passive equal-weight portfolio
-    # Passive baseline performance (force same starting value)
+    # Step 5: Passive equal-weight benchmark (same initial investment)
     equal_weights = np.ones(len(assets)) / len(assets)
-    passive_returns = (data.pct_change().dropna() + 1).cumprod()
-    passive_growth = passive_returns.dot(equal_weights)
-    # Prepend initial investment manually
-    passive_values = pd.concat([
-        pd.Series([1.0], index=[passive_growth.index[0]]),
-        passive_growth
-    ]).cumprod() * investment_amount
+    passive_returns = returns.dot(equal_weights)
+    passive_growth = (1 + passive_returns).cumprod() * investment_amount
+    passive_dates = returns.index
 
-    # Step 8: Performance comparison chart
+    # Step 6: Build performance comparison chart
     performance_chart = go.Figure()
     performance_chart.add_trace(go.Scatter(
-        x=env.dates[1:len(portfolio_values)+1],
-        y=portfolio_values,
+        x=info["dates"],
+        y=rl_values,
         mode="lines+markers",
         name="RL Portfolio Value"
     ))
     performance_chart.add_trace(go.Scatter(
-        x=passive_values.index,
-        y=passive_values.values,
+        x=passive_dates,
+        y=passive_growth,
         mode="lines",
         name="Passive Equal-Weight Portfolio",
         line=dict(dash='dot')
@@ -114,7 +95,7 @@ def optimize_portfolio(risk_tolerance, investment_amount, assets, time_range):
         yaxis_title="Portfolio Value ($)"
     )
 
-    # Step 9: Allocation CSV
+    # Step 7: Allocation CSV export
     allocations_df = pd.DataFrame({
         "Asset": assets,
         "Allocation (%)": np.round(weights * 100, 2)
